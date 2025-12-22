@@ -4,7 +4,7 @@ from gtts import gTTS
 from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeVideoClip
 
 def get_luna_script(api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": "あなたは毒舌女子高生ルナです。世界の面白い雑学を1つ教えて。最後に画像生成用プロンプトを 'Prompt: (英語)' の形式で付けて。"}]}],
         "safetySettings": [{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}]
