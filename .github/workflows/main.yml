@@ -1,29 +1,29 @@
 name: Auto Video Creator
 on:
   schedule:
-    - cron: '0 1 * * *' # 日本時間午前10時
+    - cron: '0 1 * * *' # 日本時間10時
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # v2からv4へ修正
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v5 # v2からv5へ修正
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get install -y ffmpeg
           pip install requests gtts moviepy==1.0.3
       - name: Run script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
       - name: Upload Video
-        uses: actions/upload-artifact@v4 # ここがエラーの直接の原因でした（v2からv4へ修正）
+        uses: actions/upload-artifact@v4
         with:
           name: daily-video
           path: output.mp4
