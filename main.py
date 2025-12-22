@@ -6,23 +6,23 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script(api_key):
-    # Gemini 1.5 Flash (Gemini 3 Flashエンジン)
+    # Gemini 1.5 Flash (Gemini 3 Flashの最新版)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
                 "text": """
-                あなたはプロの怪談師です。視聴者が楽しめる、フィクションの短い怪談を1つ作ってください。
+                あなたはプロの脚本家です。視聴者が「不思議だな」と感じる、マイルドで幻想的な現代の都市伝説（フィクション）を1つ書いてください。
                 
-                【ルール】
-                1. 暴力やグロテスクな表現は一切禁止です。
-                2. 「不思議でゾッとする」心理的なホラーにしてください。
-                3. 文中に（はぁ…）（ふふっ）を必ず入れて演技してください。
-                4. 最後に 'Prompt: (英語の画像プロンプト)' を付けて。
+                【構成の指示】
+                1. 暴力、流血、犯罪、自傷行為、差別的な内容は絶対に含めないでください。
+                2. 心理的な「違和感」や「不思議な体験」をテーマにしてください。
+                3. 文中に（はぁ…）（ふふっ）といった演技指示を入れて、人間味のある語りにしてください。
+                4. 最後に必ず 'Prompt: (英語の幻想的な画像プロンプト)' を1行追加してください。
                 
-                冒頭：「…ねぇ、聞こえる？…これ、あなたの部屋の音じゃないよね？」
-                最後：「…あ、後ろ。見ちゃだめだよ。…ふふっ。」
+                語り出し：「…ねぇ、聞こえる？…これ、あなたの部屋の音じゃないよね？」
+                締めくくり：「…あ、後ろ。見ちゃだめだよ。…ふふっ。」
                 """
             }]
         }],
@@ -38,18 +38,18 @@ def get_horror_script(api_key):
         response = requests.post(url, json=payload, timeout=30)
         data = response.json()
         
-        # 回答がブロックされた場合のログ確認
+        # 検閲でブロックされた場合のデバッグログ
         if 'candidates' not in data or not data['candidates'][0].get('content'):
-            print("Gemini blocked the request. Full response:", data)
-            return "…ねぇ。そこにいるのは分かってるよ。…なんてね。怪談の準備中だよ。", "Eerie dark hallway"
+            print("Gemini Blocked/Error. Data:", data)
+            return "…ふふっ。まだ、あなたの後ろの影に気づいてないみたいだね。…怖い話、聞きたい？", "Eerie silhouette in a dark room, cinematic"
 
         text = data['candidates'][0]['content']['parts'][0]['text']
         script = text.split("Prompt:")[0].strip()
-        img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "Dark misty forest, cinematic lighting")
+        img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "Dark mysterious fog, cinematic lighting")
         return script, img_prompt
     except Exception as e:
-        print(f"Error connecting to Gemini: {e}")
-        return "…不思議。影が一つ増えてる。通信エラーみたいだね。", "Dark mysterious atmosphere"
+        print(f"Error: {e}")
+        return "…不思議。影が一つ増えてる。…今日はもう、寝たほうがいいよ。", "Dark moody atmosphere"
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
@@ -70,7 +70,7 @@ def download_voicevox(text, speaker_id=2):
 def process_audio():
     if not os.path.exists("raw_voice.wav"): return
     voice = AudioSegment.from_wav("raw_voice.wav")
-    # リバーブ（残響）で人間味と恐怖を出す
+    # リバーブ（残響）を加工して「すぐ後ろで喋っている感」を出す
     reverb = voice - 15 
     processed = voice.overlay(reverb, position=60).overlay(reverb, position=120)
     processed.export("processed_voice.wav", format="wav")
