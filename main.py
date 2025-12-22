@@ -4,8 +4,8 @@ from gtts import gTTS
 from moviepy.editor import ImageClip, AudioFileClip, CompositeVideoClip
 
 def get_luna_script(api_key):
-    # Gemini 1.5 Flash を使用（多くのアカウントで最も安定して動く設定です）
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+   # Gemini 3 Flash Preview を使用する設定
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={api_key}"
     
     payload = {
         "contents": [{"parts": [{"text": "あなたは毒舌女子高生ルナです。世界の面白い雑学を1つ教えて。最後に画像生成用プロンプトを 'Prompt: (英語)' の形式で付けて。"}]}],
