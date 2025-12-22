@@ -1,12 +1,12 @@
 import os
 import requests
 import time
+import re
 from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip
 from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # あなたのngrok URL
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -14,11 +14,11 @@ def get_horror_script():
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは日本のプロ怪談師です。必ず『日本語』で怪談を書いてください。文中に（はぁ…）（ふふっ）などの演技を入れて、視聴者を恐怖させてください。また、最後に必ず画像用の英語プロンプトとBGMの種類を添えてください。"
+                "content": "あなたはプロの怪談師です。余計な解説（1. 2. 3.など）は一切含めず、怪談の本文、Prompt、BGMのみを出力してください。"
             },
             {
                 "role": "user", 
-                "content": "【重要：必ず日本語で出力してください】150文字程度のゾッとする怖い話を1つ。構成：1.日本語の怪談本文 2.Prompt: (英語の画像プロンプト) 3.BGM: (slow, dark, tensionのいずれか) の順で出力してください。"
+                "content": "【出力形式を厳守してください】\n怪談の本文（日本語で150文字程度）\nPrompt: (英語の画像プロンプト)\nBGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -29,23 +29,32 @@ def get_horror_script():
         data = response.json()
         text = data['choices'][0]['message']['content']
         
-        # 日本語が含まれていない場合の警告（ログ用）
-        print(f"Generated Content: {text}")
-        
-        # BGMタイプの抽出
+        print(f"--- Raw AI Output ---\n{text}\n--------------------")
+
+        # BGM判定（ログにある「BGM : slow」のような形式にも対応）
         bgm_type = "slow"
-        if "bgm: dark" in text.lower(): bgm_type = "dark"
-        elif "bgm: tension" in text.lower(): bgm_type = "tension"
-        
-        # 脚本、プロンプトの分離（Prompt: という単語を区切りにする）
+        if "dark" in text.lower(): bgm_type = "dark"
+        elif "tension" in text.lower(): bgm_type = "tension"
+
+        # 台本のクリーニング（「1. 日本語の怪談本文：」などを消去）
+        # Prompt: 以降を切り捨て
         script = text.split("Prompt:")[0].strip()
-        remaining = text.split("Prompt:")[1] if "Prompt:" in text else "Dark creepy room, cinematic"
-        img_prompt = remaining.split("BGM:")[0].strip()
-        
+        # 文頭の「1. 」「日本語の怪談本文：」「※」などのラベルを削除
+        script = re.sub(r"^[0-9]\.\s*", "", script)
+        script = re.sub(r"^.*?怪談本文[:：]\s*", "", script, flags=re.MULTILINE)
+        script = re.sub(r"※.*$", "", script, flags=re.DOTALL) # 注意書きを削除
+        script = script.strip()
+
+        # 画像プロンプトの抽出
+        img_prompt = "Dark eerie haunted house, cinematic"
+        if "Prompt:" in text:
+            img_prompt = text.split("Prompt:")[1].split("BGM:")[0].strip()
+            img_prompt = re.sub(r"^[0-9]\.\s*", "", img_prompt)
+
         return script, img_prompt, bgm_type
     except Exception as e:
         print(f"Script Error: {e}")
-        return "…ねぇ。鏡の中のあなたが、ずっと笑ってるよ。…ふふっ。", "dark mirror, cinematic", "slow"
+        return "…ねぇ。そこにいるんでしょ？…ふふっ。", "Dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -85,18 +94,20 @@ def make_video(bgm_type):
     
     voice_audio = AudioFileClip(voice_path)
     
-    # BGMの読み込みと合成（ファイル名は小文字で指定）
+    # BGMフォルダ内のファイル確認
     bgm_path = f"bgm/{bgm_type}.mp3"
+    print(f"Selected BGM: {bgm_path}")
+    
     if os.path.exists(bgm_path):
-        bgm_audio = AudioFileClip(bgm_path).volumex(0.15).set_duration(voice_audio.duration)
+        bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice_audio.duration)
         final_audio = CompositeAudioClip([voice_audio, bgm_audio])
     else:
+        print(f"Warning: BGM file {bgm_path} not found.")
         final_audio = voice_audio
 
-    # 背景動画化（ゆっくりズーム）
     if os.path.exists("background.jpg"):
         clip = ImageClip("background.jpg").set_duration(voice_audio.duration)
-        clip = clip.resize(lambda t: 1 + 0.01 * t) 
+        clip = clip.resize(lambda t: 1 + 0.01 * t) # 1%ズーム
     else:
         clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice_audio.duration)
     
@@ -104,12 +115,11 @@ def make_video(bgm_type):
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
-    print("--- 生成開始 ---")
     script, img_prompt, bgm_type = get_horror_script()
-    print(f"BGM Type: {bgm_type}")
+    print(f"Final Script: {script}")
+    print(f"Final BGM Type: {bgm_type}")
     
     download_image(img_prompt)
     download_voicevox(script, speaker_id=2)
     process_audio()
     make_video(bgm_type)
-    print("--- すべて完了 ---")
