@@ -1,27 +1,28 @@
 import os
 import requests
 import time
-from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip
+from moviepy.editor import ImageClip, AudioFileClip
 from pydub import AudioSegment
 
 def get_horror_script(api_key):
-    # 最新の Gemini 1.5 Flash エンドポイント（Gemini 3 Flashと互換性あり）
+    # Gemini 3 Flash の最新エンドポイント（アカウントの権限に合わせて最適化）
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
                 "text": """
-                あなたは伝説の怪談師です。視聴者の耳元で囁くように語ってください。
+                あなたは伝説の怪談師です。視聴者が夜、一人でいることを後悔するような話を1つ語ってください。
                 
-                【表現の指示】
-                ・文中に「（はぁ…）」「（ふふっ）」などの吐息や笑い声を入れ、人間らしい『タメ』を作ってください。
+                【Gemini 3 Flashへの演技指示】
+                ・人間らしい『息遣い』や『間』を表現するため、文中に「（はぁ…）」「（ふふっ）」「（…っ！）」を入れてください。
+                ・「…」を効果的に使い、じわじわと追い詰めるような話し方にしてください。
                 ・冒頭は「…ねぇ、聞こえる？…これ、あなたの部屋の音じゃないよね？」
                 ・最後は「…あ、後ろ。見ちゃだめだよ。…ふふっ。」
                 
                 【出力形式】
                 物語の内容
-                Prompt: (不気味な画像生成用英語プロンプト)
+                Prompt: (不気味で実写のような画像生成用英語プロンプト)
                 """
             }]
         }],
@@ -33,56 +34,61 @@ def get_horror_script(api_key):
         ]
     }
     
-    response = requests.post(url, json=payload)
-    data = response.json()
-    
-    # 【エラー対策】データがあるか厳重にチェック
-    if 'candidates' not in data or not data['candidates'][0].get('content'):
-        print("API Response Error:", data)
-        return "…ねぇ、後ろに誰かいない？…なんてね、通信エラーだよ。", "Dark spooky ghost in a hallway"
+    try:
+        response = requests.post(url, json=payload)
+        data = response.json()
+        
+        # 安全フィルター等で内容が空の場合の対策
+        if 'candidates' not in data or not data['candidates'][0].get('content'):
+            return "…ねぇ、後ろに誰かいない？…なんてね、通信エラーだよ。次はちゃんとしてね。", "Eerie dark hallway, cinematic lighting"
 
-    text = data['candidates'][0]['content']['parts'][0]['text']
-    script = text.split("Prompt:")[0].strip()
-    img_prompt = "Eerie cinematic horror masterwork, " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted room")
-    return script, img_prompt
+        text = data['candidates'][0]['content']['parts'][0]['text']
+        # 台本と画像プロンプトを分離
+        script = text.split("Prompt:")[0].strip()
+        img_prompt = "Hyper-realistic horror, dark ambient, " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "ghostly shadow")
+        return script, img_prompt
+    except Exception as e:
+        return "…システムに何かが入り込んだみたい。通信エラーだよ。", "Glitched digital ghost"
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
-    for _ in range(60): # 起動待ち
+    
+    # エンジンの起動を待機
+    for _ in range(60):
         try:
             if requests.get(f"{base_url}/version").status_code == 200: break
         except: time.sleep(1)
     
     query_res = requests.post(f"{base_url}/audio_query?text={text}&speaker={speaker_id}")
     query_data = query_res.json()
-    query_data['speedScale'] = 0.85      # 落ち着いたトーン
-    query_data['intonationScale'] = 1.6 # 抑揚を強く
+    
+    # 人間味のある音響設定
+    query_data['speedScale'] = 0.85      # 少しゆっくり
+    query_data['intonationScale'] = 1.7 # 抑揚（感情）を強く
     
     voice_res = requests.post(f"{base_url}/synthesis?speaker={speaker_id}", json=query_data)
     with open("raw_voice.wav", "wb") as f:
         f.write(voice_res.content)
 
 def process_audio():
-    # pydubでリバーブ（残響）を加工
+    if not os.path.exists("raw_voice.wav"): return
     voice = AudioSegment.from_wav("raw_voice.wav")
     
-    # 【リバーブ】幽霊のような響きを作る
+    # 【リバーブ加工】
     reverb = voice - 15 
     processed = voice.overlay(reverb, position=60).overlay(reverb, position=120)
-    
-    # 最終音声
     processed.export("processed_voice.wav", format="wav")
 
 def download_image(prompt):
-    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=444"
+    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=999"
+    res = requests.get(url)
     with open("background.jpg", 'wb') as f:
-        f.write(requests.get(url).content)
+        f.write(res.content)
 
 def make_video():
-    # 動画合成
-    audio = AudioFileClip("processed_voice.wav")
+    audio_path = "processed_voice.wav" if os.path.exists("processed_voice.wav") else "raw_voice.wav"
+    audio = AudioFileClip(audio_path)
     clip = ImageClip("background.jpg").set_duration(audio.duration)
-    
     video = clip.set_audio(audio)
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
