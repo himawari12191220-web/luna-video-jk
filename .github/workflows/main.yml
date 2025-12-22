@@ -1,8 +1,8 @@
 name: Auto Video Creator
 on:
   schedule:
-    - cron: '0 1 * * *' # これが日本時間の午前10時（世界標準時の午前1時）を指します
-  workflow_dispatch: # 手動で動かすためのボタン
+    - cron: '0 1 * * *' # 日本時間10時
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,9 +15,15 @@ jobs:
           python-version: '3.9'
       - name: Install dependencies
         run: |
-          pip install requests gtts moviepy
-          sudo apt-get install ffmpeg
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick
+          pip install requests gtts moviepy==1.0.3
       - name: Run script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
+      - name: Upload Video
+        uses: actions/upload-artifact@v2
+        with:
+          name: daily-video
+          path: output.mp4
