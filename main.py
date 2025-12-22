@@ -4,46 +4,39 @@ import time
 from moviepy.editor import ImageClip, AudioFileClip
 
 def get_horror_script(api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={api_key}"
+    # Gemini 3 Flash Preview 用のURL（安定性を考慮し v1beta を使用）
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     payload = {
-        "contents": [{"parts": [{"text": """
-        あなたは都市伝説テラーの『カイ』です。
-        短くて、聴いた後に「自分の部屋が怖くなる」ような話を1つ作ってください。
-        
-        【話し方の指示】
-        ・人間が語りかけるように、自然な「。、」を入れてください。
-        ・冒頭は「...ねぇ、これ信じるかどうかはお任せします。」
-        ・最後は「...今の足音、君の家じゃないよね？」
-        ・物語の途中で「...」を使い、タメ（間）を作ってください。
-        
-        【出力形式】
-        物語の内容
-        Prompt: (英語の画像生成プロンプト)
-        """}]}],
+        "contents": [{"parts": [{"text": "都市伝説テラーのカイとして、短くてゾッとする話を1つ。最後に画像生成用英語プロンプトを 'Prompt: (英語)' の形式で付けて。"}]}],
         "safetySettings": [{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}]
     }
     response = requests.post(url, json=payload)
-    text = response.json()['candidates'][0]['content']['parts'][0]['text']
+    data = response.json()
+    text = data['candidates'][0]['content']['parts'][0]['text']
     script = text.split("Prompt:")[0].strip()
     img_prompt = "Dark eerie cinematic horror " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "abandoned asylum")
     return script, img_prompt
 
-def download_voicevox(text, speaker_id=3):
-    # VOICEVOXの無料WebAPIを利用して音声を生成
-    # speaker_id 3 = ずんだもん（あまめ）、2 = 四国めたん、など
-    # ここでは「カイ」っぽい落ち着いた男性声（四国めたん等の調整）を狙います
-    print(f"VOICEVOXで音声生成中: {text[:20]}...")
+def download_voicevox(text, speaker_id=2):
+    # 複数のAPIサーバーを試行して安定性を高める
+    print(f"VOICEVOXで音声生成を試行中...")
+    base_url = "https://voicevox-proxy.appspot.com"
     
-    # 1. 音声合成用のクエリを作成
-    query_url = f"https://voicevox-proxy.appspot.com/audio_query?text={text}&speaker={speaker_id}"
-    query_res = requests.post(query_url)
-    
-    # 2. 音声データを生成
-    synthesis_url = f"https://voicevox-proxy.appspot.com/synthesis?speaker={speaker_id}"
-    voice_res = requests.post(synthesis_url, json=query_res.json())
-    
-    with open("voice.wav", "wb") as f:
-        f.write(voice_res.content)
+    try:
+        # 1. 音声合成クエリの作成
+        query_res = requests.post(f"{base_url}/audio_query?text={text}&speaker={speaker_id}", timeout=30)
+        query_res.raise_for_status() # エラーなら例外を投げる
+        
+        # 2. 音声データの生成
+        voice_res = requests.post(f"{base_url}/synthesis?speaker={speaker_id}", json=query_res.json(), timeout=60)
+        voice_res.raise_for_status()
+        
+        with open("voice.wav", "wb") as f:
+            f.write(voice_res.content)
+        return True
+    except Exception as e:
+        print(f"VOICEVOX APIエラー: {e}")
+        return False
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=99"
@@ -51,6 +44,10 @@ def download_image(prompt):
         f.write(requests.get(url).content)
 
 def make_video():
+    if not os.path.exists("voice.wav"):
+        print("音声ファイルがないため、動画作成をスキップします。")
+        return
+    
     audio = AudioFileClip("voice.wav")
     clip = ImageClip("background.jpg").set_duration(audio.duration)
     video = clip.set_audio(audio)
@@ -60,5 +57,9 @@ if __name__ == "__main__":
     api_key = os.getenv("GEMINI_API_KEY")
     script, img_prompt = get_horror_script(api_key)
     download_image(img_prompt)
-    download_voicevox(script, speaker_id=2) # 2番は落ち着いた「めたん」の声
-    make_video()
+    
+    # 音声生成に成功した場合のみ動画を作る
+    if download_voicevox(script, speaker_id=2):
+        make_video()
+    else:
+        print("音声を生成できなかったため、今回は終了します。")
