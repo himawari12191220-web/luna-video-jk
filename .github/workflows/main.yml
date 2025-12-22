@@ -7,7 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # VOICEVOXエンジンをコンテナとして起動
     services:
       voicevox:
         image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
