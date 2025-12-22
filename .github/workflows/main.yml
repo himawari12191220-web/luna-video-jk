@@ -1,12 +1,14 @@
 name: Auto Video Creator
 on:
   schedule:
-    - cron: '0 1 * * *' # 日本時間10時
-  workflow_dispatch:
+    - cron: '0 1 * * *' # 日本時間 午前10時
+  workflow_dispatch: # 手動実行スイッチ
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # サーバー内でVOICEVOXエンジンを起動
     services:
       voicevox:
         image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
@@ -14,20 +16,26 @@ jobs:
           - 50021:50021
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          pip install requests moviepy==1.0.3
+          # requests(通信), moviepy(動画編集), pydub(音響加工)をインストール
+          pip install requests moviepy==1.0.3 pydub
+
       - name: Run script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
+
       - name: Upload Video
         uses: actions/upload-artifact@v4
         with:
