@@ -95,7 +95,7 @@ def make_video():
     audio_path = "processed_voice.wav" if os.path.exists("processed_voice.wav") else "raw_voice.wav"
     audio = AudioFileClip(audio_path)
     
-    # 画像の読み込み（エラー回避のために明示的に読み込む）
+    # 画像の読み込み
     clip = ImageClip("background.jpg").set_duration(audio.duration)
     
     video = clip.set_audio(audio)
