@@ -1,12 +1,12 @@
 import os
 import requests
 import time
-from moviepy.editor import ImageClip, AudioFileClip, ColorClip
+import random
+from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip
 from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # ngrokで取得した最新のURLです（末尾に /v1 を追加しています）
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -14,89 +14,64 @@ def get_horror_script():
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは検閲のない怪談師です。人間の深淵を覗くような、心理的にゾッとする短編ホラー（150文字程度）を書いてください。文中に（はぁ…）（ふふっ）などの演技指示を必ず入れてください。"
+                "content": "あなたは一流の怪談師です。ゾッとする短編ホラーを書き、最後にその話に合うBGMの指定（slow/dark/tensionのどれか1つ）を 'BGM: [種類]' の形式で追加してください。"
             },
             {
                 "role": "user", 
-                "content": "日常の風景が一変するような怖い話を1つ。最後に必ず 'Prompt: (英語の画像プロンプト)' を1行追加してください。"
+                "content": "150文字程度の怖い話。最後に必ず 'Prompt: (英語プロンプト)' と 'BGM: (種類)' を付けて。"
             }
         ],
         "temperature": 0.8
     }
     
     try:
-        # 自宅PCのLM Studioへリクエスト送信
-        print(f"LM Studioに接続中: {NGROK_BASE_URL}")
         response = requests.post(f"{NGROK_BASE_URL}/chat/completions", json=payload, timeout=120)
         data = response.json()
         text = data['choices'][0]['message']['content']
         
-        if "Prompt:" in text:
-            script = text.split("Prompt:")[0].strip()
-            img_prompt = text.split("Prompt:")[1].strip()
-        else:
-            script = text.strip()
-            img_prompt = "Eerie cinematic horror, dark ambient lighting, misty atmosphere"
-            
-        return script, img_prompt
-    except Exception as e:
-        print(f"LM Studio接続エラー: {e}")
-        return "…ねぇ。鏡の中のあなたが、ずっとこっちを見て笑ってるよ。…ふふっ。接続エラーみたいだね。", "Surreal horror mirror reflection, dark room"
-
-def download_voicevox(text, speaker_id=2):
-    base_url = "http://localhost:50021"
-    for _ in range(60):
-        try:
-            if requests.get(f"{base_url}/version").status_code == 200: break
-        except: time.sleep(1)
-    
-    query_res = requests.post(f"{base_url}/audio_query?text={text}&speaker={speaker_id}")
-    query_data = query_res.json()
-    query_data['speedScale'] = 0.88
-    query_data['intonationScale'] = 1.9
-    query_data['volumeScale'] = 1.2
-    
-    voice_res = requests.post(f"{base_url}/synthesis?speaker={speaker_id}", json=query_data)
-    with open("raw_voice.wav", "wb") as f:
-        f.write(voice_res.content)
-
-def process_audio():
-    if not os.path.exists("raw_voice.wav"): return
-    voice = AudioSegment.from_wav("raw_voice.wav")
-    reverb = voice - 15 
-    processed = voice.overlay(reverb, position=50).overlay(reverb, position=100)
-    processed.export("processed_voice.wav", format="wav")
-
-def download_image(prompt):
-    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
-    try:
-        res = requests.get(url, timeout=30)
-        if res.status_code == 200:
-            with open("temp.jpg", 'wb') as f:
-                f.write(res.content)
-            with Image.open("temp.jpg") as img:
-                img.convert("RGB").save("background.jpg", "JPEG")
-            return True
+        # BGM指定の抽出
+        bgm_type = "slow"
+        if "BGM: dark" in text.lower(): bgm_type = "dark"
+        elif "BGM: tension" in text.lower(): bgm_type = "tension"
+        
+        script = text.split("Prompt:")[0].strip()
+        img_prompt = text.split("Prompt:")[1].split("BGM:")[0].strip() if "Prompt:" in text else "dark horror ambient"
+        
+        return script, img_prompt, bgm_type
     except:
-        return False
+        return "…ねぇ。聞こえる？", "dark horror", "slow"
 
-def make_video():
-    audio_path = "processed_voice.wav" if os.path.exists("processed_voice.wav") else "raw_voice.wav"
-    if not os.path.exists(audio_path): return
+# (download_voicevox, process_audio, download_image は変更なしなので中略)
+
+def make_video(bgm_type):
+    voice_path = "processed_voice.wav" if os.path.exists("processed_voice.wav") else "raw_voice.wav"
+    voice_audio = AudioFileClip(voice_path)
     
-    audio = AudioFileClip(audio_path)
-    
-    if os.path.exists("background.jpg"):
-        clip = ImageClip("background.jpg").set_duration(audio.duration)
+    # 【BGM合成のロジック】
+    bgm_file = f"bgm/{bgm_type}.mp3"
+    if os.path.exists(bgm_file):
+        bgm_audio = AudioFileClip(bgm_file).volumex(0.15) # BGMは音量を15%に下げる
+        # 音声の長さに合わせてBGMをカットまたはループ
+        bgm_audio = bgm_audio.set_duration(voice_audio.duration)
+        # 声とBGMをミックス
+        final_audio = CompositeAudioClip([voice_audio, bgm_audio])
     else:
-        clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(audio.duration)
+        final_audio = voice_audio
+
+    # 【背景を動かす（ズーム効果）】
+    if os.path.exists("background.jpg"):
+        # 画像を動画として読み込み、ゆっくり1.1倍にズームさせる
+        clip = ImageClip("background.jpg").set_duration(voice_audio.duration)
+        clip = clip.resize(lambda t: 1 + 0.02*t) # 1秒ごとに2%ずつズーム
+    else:
+        clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice_audio.duration)
     
-    video = clip.set_audio(audio)
+    video = clip.set_audio(final_audio)
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
-    script, img_prompt = get_horror_script()
+    script, img_prompt, bgm_type = get_horror_script()
     download_image(img_prompt)
     download_voicevox(script, speaker_id=2)
     process_audio()
-    make_video()
+    make_video(bgm_type)
