@@ -6,13 +6,24 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script(api_key):
-    # Gemini 3 Flash / 1.5 Flash の最新エンドポイント
+    # Gemini 1.5 Flash (Gemini 3 Flashエンジン)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
-                "text": "あなたは伝説の怪談師です。視聴者が夜、一人でいるのを後悔するような短い怖い話を1つ語ってください。文中に（はぁ…）（ふふっ）を必ず入れ、恐怖を演出してください。最後に 'Prompt: (英語の不気味な画像プロンプト)' を付けて。"
+                "text": """
+                あなたはプロの怪談師です。視聴者が楽しめる、フィクションの短い怪談を1つ作ってください。
+                
+                【ルール】
+                1. 暴力やグロテスクな表現は一切禁止です。
+                2. 「不思議でゾッとする」心理的なホラーにしてください。
+                3. 文中に（はぁ…）（ふふっ）を必ず入れて演技してください。
+                4. 最後に 'Prompt: (英語の画像プロンプト)' を付けて。
+                
+                冒頭：「…ねぇ、聞こえる？…これ、あなたの部屋の音じゃないよね？」
+                最後：「…あ、後ろ。見ちゃだめだよ。…ふふっ。」
+                """
             }]
         }],
         "safetySettings": [
@@ -26,21 +37,22 @@ def get_horror_script(api_key):
     try:
         response = requests.post(url, json=payload, timeout=30)
         data = response.json()
-        # AIが回答を拒否した場合はログを出して予備セリフへ
+        
+        # 回答がブロックされた場合のログ確認
         if 'candidates' not in data or not data['candidates'][0].get('content'):
-            print("API Response Error:", data)
-            return "…ねぇ、後ろに誰かいない？…なんてね。通信エラーだよ。次はちゃんとしてね。", "Eerie silhouette in dark room"
+            print("Gemini blocked the request. Full response:", data)
+            return "…ねぇ。そこにいるのは分かってるよ。…なんてね。怪談の準備中だよ。", "Eerie dark hallway"
 
         text = data['candidates'][0]['content']['parts'][0]['text']
         script = text.split("Prompt:")[0].strip()
-        img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted hallway")
+        img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "Dark misty forest, cinematic lighting")
         return script, img_prompt
-    except:
-        return "…システムに何かが入り込んだみたい。通信エラーだよ。", "Glitched digital ghost"
+    except Exception as e:
+        print(f"Error connecting to Gemini: {e}")
+        return "…不思議。影が一つ増えてる。通信エラーみたいだね。", "Dark mysterious atmosphere"
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
-    # VOICEVOXエンジンの起動待ち
     for _ in range(60):
         try:
             if requests.get(f"{base_url}/version").status_code == 200: break
@@ -58,7 +70,7 @@ def download_voicevox(text, speaker_id=2):
 def process_audio():
     if not os.path.exists("raw_voice.wav"): return
     voice = AudioSegment.from_wav("raw_voice.wav")
-    # リバーブ加工（残響）
+    # リバーブ（残響）で人間味と恐怖を出す
     reverb = voice - 15 
     processed = voice.overlay(reverb, position=60).overlay(reverb, position=120)
     processed.export("processed_voice.wav", format="wav")
@@ -80,7 +92,6 @@ def make_video():
     if os.path.exists("background.jpg"):
         clip = ImageClip("background.jpg").set_duration(audio.duration)
     else:
-        # 画像がない場合は黒画面で対応（エラー回避）
         clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(audio.duration)
     video = clip.set_audio(audio)
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
