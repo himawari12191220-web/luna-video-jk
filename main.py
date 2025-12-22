@@ -4,24 +4,34 @@ from gtts import gTTS
 from moviepy.editor import ImageClip, AudioFileClip, TextClip, CompositeVideoClip
 from moviepy.config import change_settings
 
-# フォントの設定（Linux環境用）
+# Linux環境用の設定
 change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})
 
 def get_luna_script(api_key):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    prompt = """
-    あなたは少し毒舌な女子高生『ルナ』です。
-    視聴者が驚く『世界の真実・雑学』を1つ教えて。
-    【ルール】
-    ・冒頭は必ず「ねぇ、まだそんなこと信じてんの？」から始める。
-    ・最後は「ま、知ったところでどうにもならないけどね」で締める。
-    ・最後に、雑学に関連する画像生成用英語プロンプトを「Prompt: (英語)」の形式で出力して。
-    """
-    response = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
-    text = response.json()['candidates'][0]['content']['parts'][0]['text']
     
+    # 安全フィルターを無効化してエラーを回避する設定
+    payload = {
+        "contents": [{"parts": [{"text": "あなたは少し毒舌な女子高生ルナです。世界の面白い雑学を1つ教えて。最後に画像生成用プロンプトを 'Prompt: (英語)' の形式で付けて。"}]}],
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+    
+    response = requests.post(url, json=payload)
+    data = response.json()
+    
+    # エラーチェックを追加
+    if 'candidates' not in data:
+        print("Google AIからの応答エラー:", data)
+        return "ねぇ、ちょっと通信エラーなんだけど。やる気出しなさいよ。", "Cyberpunk girl"
+
+    text = data['candidates'][0]['content']['parts'][0]['text']
     script = text.split("Prompt:")[0].strip()
-    img_prompt = text.split("Prompt:")[1].strip() if "Prompt:" in text else "Cyberpunk city"
+    img_prompt = text.split("Prompt:")[1].strip() if "Prompt:" in text else "Anime school girl"
     return script, img_prompt
 
 def download_image(prompt):
@@ -35,7 +45,7 @@ def make_video(script):
     audio = AudioFileClip("voice.mp3")
     
     clip = ImageClip("background.jpg").set_duration(audio.duration)
-    # 字幕の設定（エラー回避のため標準フォントを使用）
+    # フォントエラー対策：デフォルトフォントを使用
     txt = TextClip(script, fontsize=50, color='white', method='caption', size=(900, None)).set_duration(audio.duration)
     
     video = CompositeVideoClip([clip, txt.set_position('center')])
