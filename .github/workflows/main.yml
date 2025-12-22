@@ -1,0 +1,23 @@
+name: Auto Video Creator
+on:
+  schedule:
+    - cron: '0 1 * * *' # これが日本時間の午前10時（世界標準時の午前1時）を指します
+  workflow_dispatch: # 手動で動かすためのボタン
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install requests gtts moviepy
+          sudo apt-get install ffmpeg
+      - name: Run script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python main.py
