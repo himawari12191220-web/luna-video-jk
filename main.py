@@ -1,7 +1,7 @@
 import os
 import requests
 import time
-from moviepy.editor import ImageClip, AudioFileClip
+from moviepy.editor import ImageClip, AudioFileClip, ColorClip
 from pydub import AudioSegment
 from PIL import Image
 
@@ -12,37 +12,24 @@ def get_horror_script(api_key):
     payload = {
         "contents": [{
             "parts": [{
-                "text": """
-                あなたは伝説の怪談師です。視聴者が夜、一人でいることを後悔するような話を1つ語ってください。
-                
-                【演技指導】
-                ・文中に「（はぁ…）」「（ふふっ）」などの吐息や笑い声を入れ、人間らしい『タメ』を作ってください。
-                ・冒頭は「…ねぇ、聞こえる？…これ、あなたの部屋の音じゃないよね？」
-                ・最後は「…あ、後ろ。見ちゃだめだよ。…ふふっ。」
-                
-                【出力形式】
-                物語の内容
-                Prompt: (英語の画像プロンプト。不気味な廃墟や影を詳細に指示して)
-                """
+                "text": "伝説の怪談師として、視聴者が震え上がるような怖い話を1つ。文中に（はぁ…）（ふふっ）を入れて。最後に 'Prompt: (英語の画像プロンプト)' を付けて。"
             }]
         }],
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
         ]
     }
     
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=30)
         data = response.json()
         text = data['candidates'][0]['content']['parts'][0]['text']
         script = text.split("Prompt:")[0].strip()
-        img_prompt = "Cinematic horror, 4k, " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted room")
+        img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted room")
         return script, img_prompt
     except:
-        return "…ねぇ、後ろに誰かいない？…なんてね、通信エラーだよ。", "Dark spooky house, cinematic horror"
+        return "…ねぇ、聞こえる？…システムに何かが入り込んだみたい。通信エラーだよ。", "Glitched digital ghost"
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
@@ -68,31 +55,31 @@ def process_audio():
     processed.export("processed_voice.wav", format="wav")
 
 def download_image(prompt):
-    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=13"
+    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
     try:
         res = requests.get(url, timeout=30)
         if res.status_code == 200:
-            with open("background_raw.jpg", 'wb') as f:
+            with open("temp.jpg", 'wb') as f:
                 f.write(res.content)
-            
-            # 【重要】Pillowを使って画像を再保存し、形式を完全に整える
-            with Image.open("background_raw.jpg") as img:
+            # 画像の形式を正常化
+            with Image.open("temp.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
-    except Exception as e:
-        print(f"Image Download Error: {e}")
+    except:
+        pass
     return False
 
 def make_video():
-    if not os.path.exists("background.jpg"):
-        print("Error: background.jpg が生成されていません")
-        return
-
     audio_path = "processed_voice.wav" if os.path.exists("processed_voice.wav") else "raw_voice.wav"
+    if not os.path.exists(audio_path): return
+    
     audio = AudioFileClip(audio_path)
     
-    # 画像の読み込み（再保存した確実なファイルを使用）
-    clip = ImageClip("background.jpg").set_duration(audio.duration)
+    # 画像があればそれを使う、なければ黒背景を作る（エラー回避）
+    if os.path.exists("background.jpg"):
+        clip = ImageClip("background.jpg").set_duration(audio.duration)
+    else:
+        clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(audio.duration)
     
     video = clip.set_audio(audio)
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
@@ -100,11 +87,7 @@ def make_video():
 if __name__ == "__main__":
     api_key = os.getenv("GEMINI_API_KEY")
     script, img_prompt = get_horror_script(api_key)
-    
-    # 画像ダウンロードと変換
-    if download_image(img_prompt):
-        download_voicevox(script, speaker_id=2)
-        process_audio()
-        make_video()
-    else:
-        print("画像のダウンロードに失敗したため中断します")
+    download_image(img_prompt)
+    download_voicevox(script, speaker_id=2)
+    process_audio()
+    make_video()
