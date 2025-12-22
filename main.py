@@ -6,17 +6,20 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script(api_key):
-    # Gemini 3 Flash の最新エンドポイントを使用
+    # Gemini 3 Flash / 1.5 Flash の最新エンドポイント
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
-                "text": "伝説の怪談師として、視聴者が震え上がるような怖い話を1つ。文中に（はぁ…）（ふふっ）を入れて。最後に 'Prompt: (英語の画像プロンプト)' を付けて。"
+                "text": "あなたは伝説の怪談師です。視聴者がゾッとするような短い怖い話を1つ語ってください。文中に（はぁ…）（ふふっ）を必ず入れて。最後に 'Prompt: (英語の不気味な画像プロンプト)' を付けて。"
             }]
         }],
+        # 【重要】ホラー内容がブロックされないよう、すべての安全設定をオフにします
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
         ]
     }
@@ -24,16 +27,23 @@ def get_horror_script(api_key):
     try:
         response = requests.post(url, json=payload, timeout=30)
         data = response.json()
+        
+        # AIが回答を拒否した場合のチェック
+        if 'candidates' not in data or not data['candidates'][0].get('content'):
+            print("APIが内容をブロックしました。設定を確認してください:", data)
+            return "…ねぇ、後ろに誰かいない？…なんてね。通信エラーだよ。次はちゃんとしてね。", "Eerie dark hallway"
+
         text = data['candidates'][0]['content']['parts'][0]['text']
         script = text.split("Prompt:")[0].strip()
         img_prompt = (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted room")
         return script, img_prompt
-    except:
-        return "…ねぇ、聞こえる？…システムに何かが入り込んだみたい。通信エラーだよ。", "Glitched digital ghost"
+    except Exception as e:
+        print(f"接続エラー: {e}")
+        return "…システムに何かが入り込んだみたい。通信エラーだよ。", "Glitched digital ghost"
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
-    for _ in range(60):
+    for _ in range(60): # 起動待ち
         try:
             if requests.get(f"{base_url}/version").status_code == 200: break
         except: time.sleep(1)
@@ -50,6 +60,7 @@ def download_voicevox(text, speaker_id=2):
 def process_audio():
     if not os.path.exists("raw_voice.wav"): return
     voice = AudioSegment.from_wav("raw_voice.wav")
+    # 【リバーブ加工】
     reverb = voice - 15 
     processed = voice.overlay(reverb, position=60).overlay(reverb, position=120)
     processed.export("processed_voice.wav", format="wav")
@@ -61,7 +72,6 @@ def download_image(prompt):
         if res.status_code == 200:
             with open("temp.jpg", 'wb') as f:
                 f.write(res.content)
-            # 画像の形式を正常化
             with Image.open("temp.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -75,7 +85,6 @@ def make_video():
     
     audio = AudioFileClip(audio_path)
     
-    # 画像があればそれを使う、なければ黒背景を作る（エラー回避）
     if os.path.exists("background.jpg"):
         clip = ImageClip("background.jpg").set_duration(audio.duration)
     else:
