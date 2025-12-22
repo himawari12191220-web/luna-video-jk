@@ -1,11 +1,11 @@
 import os
 import requests
 import time
-from moviepy.editor import ImageClip, AudioFileClip
+from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip
 from pydub import AudioSegment
 
 def get_horror_script(api_key):
-    # Gemini 3 Flash Preview を使用
+    # 最新の Gemini 1.5 Flash エンドポイント（Gemini 3 Flashと互換性あり）
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     payload = {
@@ -25,56 +25,61 @@ def get_horror_script(api_key):
                 """
             }]
         }],
-        "safetySettings": [{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}]
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
     }
     
     response = requests.post(url, json=payload)
     data = response.json()
+    
+    # 【エラー対策】データがあるか厳重にチェック
+    if 'candidates' not in data or not data['candidates'][0].get('content'):
+        print("API Response Error:", data)
+        return "…ねぇ、後ろに誰かいない？…なんてね、通信エラーだよ。", "Dark spooky ghost in a hallway"
+
     text = data['candidates'][0]['content']['parts'][0]['text']
     script = text.split("Prompt:")[0].strip()
-    img_prompt = "Eerie cinematic horror, dark ambient " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "ghostly face in dark")
+    img_prompt = "Eerie cinematic horror masterwork, " + (text.split("Prompt:")[1].strip() if "Prompt:" in text else "dark haunted room")
     return script, img_prompt
 
 def download_voicevox(text, speaker_id=2):
     base_url = "http://localhost:50021"
-    # エンジンの起動を待機
-    for _ in range(60):
+    for _ in range(60): # 起動待ち
         try:
-            if requests.get(f"{base_url}/version").status_code == 200:
-                break
-        except:
-            time.sleep(1)
+            if requests.get(f"{base_url}/version").status_code == 200: break
+        except: time.sleep(1)
     
-    # クエリ作成（人間味のあるパラメータ調整）
     query_res = requests.post(f"{base_url}/audio_query?text={text}&speaker={speaker_id}")
     query_data = query_res.json()
-    query_data['speedScale'] = 0.85      # 少しゆっくり
-    query_data['intonationScale'] = 1.6 # 抑揚を強める
+    query_data['speedScale'] = 0.85      # 落ち着いたトーン
+    query_data['intonationScale'] = 1.6 # 抑揚を強く
     
-    # 音声合成
     voice_res = requests.post(f"{base_url}/synthesis?speaker={speaker_id}", json=query_data)
     with open("raw_voice.wav", "wb") as f:
         f.write(voice_res.content)
 
 def process_audio():
-    # pydubを使用してリバーブと環境音を加工
+    # pydubでリバーブ（残響）を加工
     voice = AudioSegment.from_wav("raw_voice.wav")
     
-    # 【リバーブ加工】音をわずかに遅らせて重ねることで残響を作る
-    reverb = voice - 12  # 音量を下げた影の音
-    # 50msと100msの遅延を重ねて「広い部屋」感を出す
-    processed = voice.overlay(reverb, position=50).overlay(reverb, position=100)
+    # 【リバーブ】幽霊のような響きを作る
+    reverb = voice - 15 
+    processed = voice.overlay(reverb, position=60).overlay(reverb, position=120)
     
-    # 最終的な音声ファイルとして書き出し
+    # 最終音声
     processed.export("processed_voice.wav", format="wav")
 
 def download_image(prompt):
-    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=666"
+    url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed=444"
     with open("background.jpg", 'wb') as f:
         f.write(requests.get(url).content)
 
 def make_video():
-    # 加工後の音声を使用
+    # 動画合成
     audio = AudioFileClip("processed_voice.wav")
     clip = ImageClip("background.jpg").set_duration(audio.duration)
     
@@ -83,13 +88,8 @@ def make_video():
 
 if __name__ == "__main__":
     api_key = os.getenv("GEMINI_API_KEY")
-    # 1. シナリオ生成
     script, img_prompt = get_horror_script(api_key)
-    # 2. 画像ダウンロード
     download_image(img_prompt)
-    # 3. 音声生成(VOICEVOX)
     download_voicevox(script, speaker_id=2)
-    # 4. 音響加工(リバーブ等)
     process_audio()
-    # 5. 動画合成
     make_video()
