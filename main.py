@@ -7,11 +7,11 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 固定ドメインURL
+    # 画像13の固定ドメイン
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像3のモデル
+        "model": "hermes-3-llama-3.1-8b",
         "messages": [
             {
                 "role": "system", 
@@ -19,7 +19,7 @@ def get_horror_script():
             },
             {
                 "role": "user", 
-                "content": "【形式厳守】怪談本文(日本語150文字程度)、Prompt: (英語プロンプト)、BGM: (slow, dark, tensionのいずれか)"
+                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -41,7 +41,7 @@ def get_horror_script():
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
 
-        # 画像プロンプト抽出
+        # プロンプト抽出
         img_prompt = "Eerie horror atmosphere, cinematic lighting"
         if "Prompt:" in text or "Prompt：" in text:
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
@@ -50,15 +50,16 @@ def get_horror_script():
         return script, img_prompt, bgm_type
     except Exception as e:
         print(f"API Error: {e}")
-        return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
+        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
     try:
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
-            with open("background.jpg", "wb") as f: f.write(res.content)
-            # 確実にRGB形式のJPEGで保存
+            with open("background.jpg", "wb") as f:
+                f.write(res.content)
+            # 確実にRGB形式で保存し直す（画像読み込みエラー対策）
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -79,20 +80,20 @@ def make_video(script, bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
     
-    # BGM読み込み（音量を調整して合成）
+    # BGMと声の合成
     if os.path.exists(bgm_path):
         bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
         audio = CompositeAudioClip([voice, bgm_audio])
     else:
         audio = voice
 
-    # 背景ズーム演出（画像21のエラー対策付き）
+    # 背景（ゆっくりズームさせる演出）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 赤い太文字字幕
+    # 【赤い太文字字幕】
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
     txt = TextClip(
         wrapped, 
@@ -105,13 +106,11 @@ def make_video(script, bgm_type):
         size=(1000, None)
     ).set_duration(voice.duration).set_position(('center', 950))
 
-    video = CompositeVideoClip([bg, txt]).set_audio(audio)
-    video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
+    CompositeVideoClip([bg, txt]).set_audio(audio).write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
-    print("--- LUNA SYSTEM START ---")
+    print("--- LUNA START ---")
     s, p, b = get_horror_script()
     download_image(p)
     download_voicevox(s)
     make_video(s, b)
-    print("--- COMPLETED ---")
