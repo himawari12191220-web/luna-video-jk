@@ -11,7 +11,7 @@ def get_horror_script():
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像3のモデル名
+        "model": "hermes-3-llama-3.1-8b", # 画像3, 4のモデル名
         "messages": [
             {
                 "role": "system", 
@@ -57,6 +57,7 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
+            # 画像読み込みエラー対策としてRGB形式で保存し直す
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -78,7 +79,7 @@ def make_video(script, bgm_type):
     bgm_path = f"bgm/{bgm_type}.mp3"
     audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
 
-    # 画像読み込みエラー対策（画像9対策）
+    # 画像読み込みエラー対策
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
