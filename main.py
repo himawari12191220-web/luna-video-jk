@@ -11,11 +11,11 @@ def get_horror_script():
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像4のロード済みモデル名
+        "model": "hermes-3-llama-3.1-8b", # 画像4のモデル名
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で150文字程度の怪談を書きます。余計な解説を省き、怪談本文、Prompt、BGMの3点を出力してください。"
+                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、余計な解説を省き、怪談本文、Prompt、BGMの3点のみを出力してください。"
             },
             {
                 "role": "user", 
@@ -30,7 +30,7 @@ def get_horror_script():
         text = response.json()['choices'][0]['message']['content']
         print(f"--- AI Output ---\n{text}")
 
-        # BGM判定：画像15, 16のような出力から抽出
+        # BGM判定（slow, dark, tensionの抽出）
         bgm_type = "slow"
         lower_text = text.lower()
         if "tension" in lower_text: bgm_type = "tension"
@@ -49,7 +49,7 @@ def get_horror_script():
 
         return script, img_prompt, bgm_type
     except:
-        return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
+        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -57,7 +57,7 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
-            # 確実にRGB形式で保存し直し
+            # 画像を確実にRGB形式で保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -77,16 +77,24 @@ def download_voicevox(text):
 def make_video(script, bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
-    audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
+    
+    # BGMの読み込み（音量を12%に抑えて合成）
+    if os.path.exists(bgm_path):
+        bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
+        audio = CompositeAudioClip([voice, bgm_audio])
+    else:
+        audio = voice
 
-    # 背景ズーム演出
+    # 背景（ゆっくりズームさせる演出）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 赤い大きな字幕
+    # 【赤い字幕テロップ】
+    # 読みやすく1行12文字で改行
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
+    
     txt = TextClip(
         wrapped, 
         fontsize=85, 
