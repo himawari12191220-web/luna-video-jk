@@ -7,19 +7,19 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 画像7の固定ドメインを設定済み
+    # 画像6の固定ドメインを設定
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像4のモデル名
+        "model": "hermes-3-llama-3.1-8b", # 画像3, 4のモデル名
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、余計な解説を省き、怪談本文、Prompt、BGMの3点のみを出力してください。"
+                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、怪談本文、Prompt、BGMの3点を出力してください。"
             },
             {
                 "role": "user", 
-                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
+                "content": "形式厳守：怪談本文(日本語150文字)、Prompt: (英語)、BGM: (slow, dark, tension)"
             }
         ],
         "temperature": 0.7
@@ -30,18 +30,17 @@ def get_horror_script():
         text = response.json()['choices'][0]['message']['content']
         print(f"--- AI Output ---\n{text}")
 
-        # BGM判定（slow, dark, tensionの抽出）
+        # BGM判定
         bgm_type = "slow"
-        lower_text = text.lower()
-        if "tension" in lower_text: bgm_type = "tension"
-        elif "dark" in lower_text: bgm_type = "dark"
+        if "tension" in text.lower(): bgm_type = "tension"
+        elif "dark" in text.lower(): bgm_type = "dark"
 
-        # 台本クリーニング：ラベル（見出し）を徹底排除
+        # 本文のクリーニング
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
 
-        # 画像プロンプト抽出
+        # プロンプト抽出
         img_prompt = "Eerie horror atmosphere, cinematic lighting"
         if "Prompt:" in text or "Prompt：" in text:
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
@@ -57,7 +56,6 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
-            # 画像を確実にRGB形式で保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -77,24 +75,15 @@ def download_voicevox(text):
 def make_video(script, bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
-    
-    # BGMの読み込み（音量を12%に抑えて合成）
-    if os.path.exists(bgm_path):
-        bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
-        audio = CompositeAudioClip([voice, bgm_audio])
-    else:
-        audio = voice
+    audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
 
-    # 背景（ゆっくりズームさせる演出）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 【赤い字幕テロップ】
-    # 読みやすく1行12文字で改行
+    # 赤字幕の作成
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
-    
     txt = TextClip(
         wrapped, 
         fontsize=85, 
@@ -115,4 +104,3 @@ if __name__ == "__main__":
     download_image(p)
     download_voicevox(s)
     make_video(s, b)
-    print("--- COMPLETED ---")
