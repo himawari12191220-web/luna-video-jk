@@ -21,14 +21,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 画像24のエラーを解決するために必要なライブラリを全てインストール
+          # 画像11, 12のエラーを解決するために必要なライブラリを全てインストール
           pip install requests moviepy==1.0.3 pydub Pillow imageio==2.25.1 imageio-ffmpeg
 
       - name: Install ImageMagick
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          # 【重要】画像21, 25, 26のセキュリティ制限を強制解除しテロップを生成可能にする設定
+          # 【重要】画像14, 15, 16, 17のセキュリティ制限を強制解除する設定
           sudo sed -i 's/domain="coder" rights="none" pattern="LABEL"/domain="coder" rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml
 
       - name: Set up VOICEVOX
@@ -39,6 +39,7 @@ jobs:
         run: python main.py
 
       - name: Upload Video
+        # 画像6の非推奨警告を解決
         uses: actions/upload-artifact@v4
         with:
           name: luna-daily-video
