@@ -7,19 +7,19 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 画像6の固定ドメインを設定
+    # 画像13で確認した固定ドメイン
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像3, 4のモデル名
+        "model": "hermes-3-llama-3.1-8b",
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、怪談本文、Prompt、BGMの3点を出力してください。"
+                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、余計な解説を省き、怪談本文、Prompt、BGMの3点を出力してください。"
             },
             {
                 "role": "user", 
-                "content": "形式厳守：怪談本文(日本語150文字)、Prompt: (英語)、BGM: (slow, dark, tension)"
+                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -32,10 +32,11 @@ def get_horror_script():
 
         # BGM判定
         bgm_type = "slow"
-        if "tension" in text.lower(): bgm_type = "tension"
-        elif "dark" in text.lower(): bgm_type = "dark"
+        lower_text = text.lower()
+        if "tension" in lower_text: bgm_type = "tension"
+        elif "dark" in lower_text: bgm_type = "dark"
 
-        # 本文のクリーニング
+        # 台本クリーニング：見出し等を徹底排除
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
@@ -48,7 +49,7 @@ def get_horror_script():
 
         return script, img_prompt, bgm_type
     except:
-        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
+        return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -56,6 +57,7 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
+            # 確実にRGB形式で保存し直し
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -77,12 +79,13 @@ def make_video(script, bgm_type):
     bgm_path = f"bgm/{bgm_type}.mp3"
     audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
 
+    # 背景ズーム演出
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 赤字幕の作成
+    # 赤い太文字字幕
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
     txt = TextClip(
         wrapped, 
@@ -104,3 +107,4 @@ if __name__ == "__main__":
     download_image(p)
     download_voicevox(s)
     make_video(s, b)
+    print("--- COMPLETED ---")
