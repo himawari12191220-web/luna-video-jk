@@ -1,43 +1,45 @@
-name: Auto Video Creator
+name: Luna Video Generator
+
 on:
+  workflow_dispatch: # 手動実行用
   schedule:
-    - cron: '0 1 * * *' # 日本時間 午前10時
-  workflow_dispatch: # 手動実行スイッチ
+    - cron: '0 1 * * *' # 毎日午前10時（日本時間）に自動実行
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # サーバー内でVOICEVOXエンジンを起動
-    services:
-      voicevox:
-        image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
-        ports:
-          - 50021:50021
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
+          pip install requests moviepy pydub Pillow
+
+      - name: Install ImageMagick
+        run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          # requests(通信), moviepy(動画編集), pydub(音響加工)をインストール
-          pip install requests moviepy==1.0.3 pydub
+          sudo apt-get install -y imagemagick
+          # 字幕生成(TextClip)に必要なセキュリティ設定の解除
+          sudo sed -i 's/domain="coder" rights="none" pattern="LABEL"/domain="coder" rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml
+
+      - name: Set up VOICEVOX
+        run: |
+          # VOICEVOXをバックグラウンドで起動
+          docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
 
       - name: Run script
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
 
       - name: Upload Video
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: daily-video
+          name: luna-daily-video
           path: output.mp4
