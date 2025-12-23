@@ -7,6 +7,7 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
+    # 画像13で確認した固定ドメインを使用
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -18,7 +19,7 @@ def get_horror_script():
             },
             {
                 "role": "user", 
-                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
+                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語プロンプト)、BGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -34,6 +35,7 @@ def get_horror_script():
         if "tension" in lower_text: bgm_type = "tension"
         elif "dark" in lower_text: bgm_type = "dark"
 
+        # 台本クリーニング
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
@@ -54,6 +56,7 @@ def download_image(prompt):
         if res.status_code == 200:
             with open("background.jpg", "wb") as f:
                 f.write(res.content)
+            # 画像読み込みエラー対策：確実にRGB形式で保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -74,12 +77,14 @@ def make_video(bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
     
+    # BGMと声の合成
     if os.path.exists(bgm_path):
         bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
         audio = CompositeAudioClip([voice, bgm_audio])
     else:
         audio = voice
 
+    # 背景（ゆっくりズームさせる演出。エラー時は黒背景）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
