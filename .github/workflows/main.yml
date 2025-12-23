@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 画像7, 8, 9のライブラリ不足エラーを解決
+          # 画像8のライブラリ不足エラーを解決するために必要なものを全てインストール
           pip install requests moviepy==1.0.3 pydub Pillow imageio==2.25.1 imageio-ffmpeg
 
       - name: Install ImageMagick
@@ -39,7 +39,7 @@ jobs:
         run: python main.py
 
       - name: Upload Video
-        # 画像6の非推奨警告を回避するためv4を使用
+        # 画像6の非推奨警告を回避するため最新のv4を使用
         uses: actions/upload-artifact@v4
         with:
           name: luna-daily-video
