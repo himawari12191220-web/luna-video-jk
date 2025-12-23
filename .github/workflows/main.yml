@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 背景画像を確実に読み込むためのライブラリ群を全て追加
+          # 画像20, 21のエラーを解決するために必要なライブラリを全てインストール
           pip install requests moviepy==1.0.3 pydub Pillow imageio==2.25.1 imageio-ffmpeg
 
       - name: Set up VOICEVOX
