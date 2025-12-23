@@ -2,11 +2,12 @@ import os
 import requests
 import time
 import re
-from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip
+from moviepy.editor import ImageClip, AudioFileClip, ColorClip, CompositeAudioClip, CompositeVideoClip
+from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 画像13で確認した固定ドメインを使用
+    # 画像6で確認した固定ドメインを使用
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -29,18 +30,15 @@ def get_horror_script():
         text = response.json()['choices'][0]['message']['content']
         print(f"--- AI Output ---\n{text}")
 
-        # BGM判定
         bgm_type = "slow"
         lower_text = text.lower()
         if "tension" in lower_text: bgm_type = "tension"
         elif "dark" in lower_text: bgm_type = "dark"
 
-        # 台本クリーニング
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
 
-        # 画像プロンプト
         img_prompt = "Eerie horror atmosphere, cinematic lighting"
         if "Prompt:" in text or "Prompt：" in text:
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
@@ -48,7 +46,7 @@ def get_horror_script():
 
         return script, img_prompt, bgm_type
     except Exception as e:
-        print(f"AI API Error: {e}")
+        print(f"API Error: {e}")
         return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
@@ -58,15 +56,11 @@ def download_image(prompt):
         if res.status_code == 200:
             with open("temp_bg.jpg", "wb") as f:
                 f.write(res.content)
-            
-            # 【重要】ダウンロードした画像を標準的なRGB形式に変換して保存し直す
+            # 【重要】画像20のエラー対策：確実にRGB形式で保存し直して MoviePy が読めるようにする
             with Image.open("temp_bg.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
-            print("Image downloaded and converted successfully.")
             return True
-    except Exception as e:
-        print(f"Image Download Error: {e}")
-        return False
+    except: return False
 
 def download_voicevox(text):
     base_url = "http://localhost:50021"
@@ -83,30 +77,28 @@ def make_video(bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
     
-    # 音声の合成
     if os.path.exists(bgm_path):
         bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
         audio = CompositeAudioClip([voice, bgm_audio])
     else:
         audio = voice
 
-    # 背景の読み込み
-    if os.path.exists("background.jpg"):
-        print("Background found. Building clip...")
-        # 背景をゆっくりズームさせる演出
-        bg = ImageClip("background.jpg").set_duration(voice.duration)
-        bg = bg.resize(lambda t: 1 + 0.02 * t)
-    else:
-        print("Background NOT found. Using dark background...")
+    # 背景読み込み（エラー時は黒背景）
+    try:
+        if os.path.exists("background.jpg"):
+            # 背景をゆっくりズームさせる演出
+            bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.02 * t)
+        else:
+            raise Exception("Background file missing")
+    except Exception as e:
+        print(f"Background Load Error: {e}")
         bg = ColorClip(size=(1080, 1920), color=(10, 0, 0)).set_duration(voice.duration)
 
     video = bg.set_audio(audio)
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
-    print("--- LUNA SYSTEM START ---")
     s, p, b = get_horror_script()
     download_image(p)
     download_voicevox(s)
     make_video(b)
-    print("--- COMPLETED ---")
