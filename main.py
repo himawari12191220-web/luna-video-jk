@@ -14,11 +14,11 @@ def get_horror_script():
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で怪談を書きます。余計なラベルを付けず、必ず本文、Prompt(英語)、BGM(slow, dark, tension)を出力してください。"
+                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で150文字程度の日本語の怪談を書きます。余計な解説を省き、最後に必ずPrompt(英語)とBGM(slow, dark, tension)を指定してください。"
             },
             {
                 "role": "user", 
-                "content": "形式厳守：怪談本文(日本語150文字)、Prompt: (英語プロンプト)、BGM: (種類)"
+                "content": "形式厳守：怪談本文、Prompt: (英語プロンプト)、BGM: (種類)"
             }
         ],
         "temperature": 0.7
@@ -29,29 +29,37 @@ def get_horror_script():
         text = response.json()['choices'][0]['message']['content']
         print(f"--- AI Output ---\n{text}")
 
+        # BGM判定
         bgm_type = "slow"
         if "tension" in text.lower(): bgm_type = "tension"
         elif "dark" in text.lower(): bgm_type = "dark"
 
+        # 台本クリーニング
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*', '', script, flags=re.MULTILINE)
-        
-        img_prompt = "Eerie horror atmosphere"
+        script = re.sub(r'了解しました。.*$', '', script, flags=re.DOTALL) # 不要な前置きを削除
+        script = script.strip()
+
+        # 画像プロンプト抽出
+        img_prompt = "Eerie haunted house, cinematic horror"
         if "Prompt:" in text or "Prompt：" in text:
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
             img_prompt = re.split(r'BGM[:：]', parts, flags=re.IGNORECASE)[0].strip()
 
         return script, img_prompt, bgm_type
     except:
-        return "…そこにいるのは分かっているわ。でも繋がらないみたいね。", "dark room", "slow"
+        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "Dark silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
     try:
-        res = requests.get(url, stream=True)
+        res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f:
                 f.write(res.content)
+            # 画像が正常に開けるか確認し、JPEG形式を確定させる
+            with Image.open("background.jpg") as img:
+                img.convert("RGB").save("background.jpg", "JPEG")
             return True
     except: return False
 
@@ -68,18 +76,30 @@ def download_voicevox(text):
 
 def make_video(script, bgm_type):
     voice = AudioFileClip("raw_voice.wav")
+    
+    # BGM合成
     bgm_path = f"bgm/{bgm_type}.mp3"
-    audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
+    if os.path.exists(bgm_path):
+        bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
+        audio = CompositeAudioClip([voice, bgm_audio])
+    else:
+        audio = voice
 
-    bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t) if os.path.exists("background.jpg") else ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
+    # 背景（画像読み込みエラー対策付き）
+    try:
+        bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
+    except Exception as e:
+        print(f"Background Error: {e}. Using black background instead.")
+        bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 字幕の追加：1行12文字で改行
+    # 赤い字幕
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
     txt = TextClip(wrapped, fontsize=85, color='red', font='DejaVu-Sans-Bold', stroke_color='black', stroke_width=3, method='caption', size=(1000, None)).set_duration(voice.duration).set_position(('center', 950))
 
     CompositeVideoClip([bg, txt]).set_audio(audio).write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
+    print("--- LUNA START ---")
     s, p, b = get_horror_script()
     download_image(p)
     download_voicevox(s)
