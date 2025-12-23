@@ -21,14 +21,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 画像19, 21の読み込みエラー対策
+          # 画像18, 19, 21の読み込みエラーを完全に防止するパッケージ群
           pip install requests moviepy==1.0.3 pydub Pillow imageio==2.25.1 imageio-ffmpeg
 
       - name: Install ImageMagick
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          # 画像16, 21のセキュリティポリシー制限を解除
+          # 【重要】画像16, 21, 25のセキュリティエラーを解決する設定
           sudo sed -i 's/domain="coder" rights="none" pattern="LABEL"/domain="coder" rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml
 
       - name: Set up VOICEVOX
