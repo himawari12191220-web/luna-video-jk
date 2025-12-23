@@ -11,7 +11,7 @@ def get_horror_script():
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像3, 4のモデル
+        "model": "hermes-3-llama-3.1-8b", # 画像3のモデル
         "messages": [
             {
                 "role": "system", 
@@ -19,7 +19,7 @@ def get_horror_script():
             },
             {
                 "role": "user", 
-                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
+                "content": "【形式厳守】怪談本文(日本語150文字程度)、Prompt: (英語プロンプト)、BGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -48,8 +48,9 @@ def get_horror_script():
             img_prompt = re.split(r'BGM[:：]', parts, flags=re.IGNORECASE)[0].strip()
 
         return script, img_prompt, bgm_type
-    except:
-        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
+    except Exception as e:
+        print(f"API Error: {e}")
+        return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -57,7 +58,7 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
-            # 画像21のエラー対策：確実にRGB形式で保存
+            # 確実にRGB形式のJPEGで保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -77,9 +78,15 @@ def download_voicevox(text):
 def make_video(script, bgm_type):
     voice = AudioFileClip("raw_voice.wav")
     bgm_path = f"bgm/{bgm_type}.mp3"
-    audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
+    
+    # BGM読み込み（音量を調整して合成）
+    if os.path.exists(bgm_path):
+        bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)
+        audio = CompositeAudioClip([voice, bgm_audio])
+    else:
+        audio = voice
 
-    # 背景ズーム演出
+    # 背景ズーム演出（画像21のエラー対策付き）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
