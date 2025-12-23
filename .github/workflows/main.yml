@@ -21,14 +21,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 画像18, 19のエラーを解決するために必要なライブラリを全てインストール
-          pip install requests moviepy==1.0.3 pydub Pillow imageio imageio-ffmpeg
+          # 画像18, 19, 21のエラーを解決するために必要なライブラリを全てインストール
+          pip install requests moviepy==1.0.3 pydub Pillow imageio==2.25.1 imageio-ffmpeg
 
       - name: Install ImageMagick
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          # 画像16の字幕生成エラーを解決する権限設定
+          # 【重要】画像21の 'security policy' エラーを解決する設定
           sudo sed -i 's/domain="coder" rights="none" pattern="LABEL"/domain="coder" rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml
 
       - name: Set up VOICEVOX
@@ -39,8 +39,11 @@ jobs:
         run: python main.py
 
       - name: Upload Video
-        # 画像17の deprecated エラーを解決
+        # 画像17の deprecated 警告を解決した最新版
         uses: actions/upload-artifact@v4
+        with:
+          name: luna-daily-video
+          path: output.mp4
         with:
           name: luna-daily-video
           path: output.mp4
