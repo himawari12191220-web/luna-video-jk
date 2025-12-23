@@ -7,11 +7,11 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 画像1の固定ドメインを設定済み
+    # 画像13で確認した固定ドメインを設定済み
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
-        "model": "hermes-3-llama-3.1-8b", # 画像3, 4のモデル名
+        "model": "hermes-3-llama-3.1-8b",
         "messages": [
             {
                 "role": "system", 
@@ -36,7 +36,7 @@ def get_horror_script():
         if "tension" in lower_text: bgm_type = "tension"
         elif "dark" in lower_text: bgm_type = "dark"
 
-        # 台本クリーニング：ラベルや余計な前置きを排除
+        # 台本クリーニング：見出し等を徹底排除
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
         script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
@@ -48,7 +48,8 @@ def get_horror_script():
             img_prompt = re.split(r'BGM[:：]', parts, flags=re.IGNORECASE)[0].strip()
 
         return script, img_prompt, bgm_type
-    except:
+    except Exception as e:
+        print(f"API Error: {e}")
         return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
@@ -56,8 +57,9 @@ def download_image(prompt):
     try:
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
-            with open("background.jpg", "wb") as f: f.write(res.content)
-            # 画像読み込みエラー対策としてRGB形式で保存し直す
+            with open("background.jpg", "wb") as f:
+                f.write(res.content)
+            # imageioエラー対策：確実にRGB形式で保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -79,13 +81,13 @@ def make_video(script, bgm_type):
     bgm_path = f"bgm/{bgm_type}.mp3"
     audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
 
-    # 画像読み込みエラー対策
+    # 背景読み込み（エラー時は黒背景）
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # 赤い大きな字幕の作成
+    # 赤い字幕の作成
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
     txt = TextClip(
         wrapped, 
@@ -101,6 +103,7 @@ def make_video(script, bgm_type):
     CompositeVideoClip([bg, txt]).set_audio(audio).write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
+    print("--- LUNA START ---")
     s, p, b = get_horror_script()
     download_image(p)
     download_voicevox(s)
