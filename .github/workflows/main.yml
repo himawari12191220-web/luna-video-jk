@@ -1,9 +1,9 @@
 name: Luna Video Generator
 
 on:
-  workflow_dispatch: # 手動実行用
+  workflow_dispatch:
   schedule:
-    - cron: '0 1 * * *' # 毎日午前10時（日本時間）に自動実行
+    - cron: '0 1 * * *' # 日本時間 午前10時
 
 jobs:
   build:
@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # v4に更新
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v5に更新
         with:
           python-version: '3.9'
 
@@ -27,19 +27,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          # 字幕生成(TextClip)に必要なセキュリティ設定の解除
+          # 画像16のエラーを解決する重要な設定
           sudo sed -i 's/domain="coder" rights="none" pattern="LABEL"/domain="coder" rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml
 
       - name: Set up VOICEVOX
         run: |
-          # VOICEVOXをバックグラウンドで起動
           docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
 
       - name: Run script
         run: python main.py
 
       - name: Upload Video
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # v4に更新（画像17のエラー対策）
         with:
           name: luna-daily-video
           path: output.mp4
