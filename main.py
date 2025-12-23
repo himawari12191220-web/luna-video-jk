@@ -7,7 +7,7 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # 画像13の固定ドメインを設定済み
+    # 画像13の固定ドメイン
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -15,11 +15,11 @@ def get_horror_script():
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で150文字程度の日本語の怪談を書きます。最後に必ずPrompt(英語)とBGM(slow, dark, tension)を出力してください。"
+                "content": "あなたは毒舌女子高生ルナ。冷酷な口調で、余計な解説を省き、怪談本文、Prompt、BGMの3点を出力してください。"
             },
             {
                 "role": "user", 
-                "content": "形式厳守：怪談本文、Prompt: (英語)、BGM: (種類)"
+                "content": "【形式厳守】怪談本文(日本語)、Prompt: (英語)、BGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -30,23 +30,26 @@ def get_horror_script():
         text = response.json()['choices'][0]['message']['content']
         print(f"--- AI Output ---\n{text}")
 
+        # BGM判定
         bgm_type = "slow"
-        if "tension" in text.lower(): bgm_type = "tension"
-        elif "dark" in text.lower(): bgm_type = "dark"
+        lower_text = text.lower()
+        if "tension" in lower_text: bgm_type = "tension"
+        elif "dark" in lower_text: bgm_type = "dark"
 
-        # 台本クリーニング：ラベルや「了解しました」等のノイズを徹底排除
+        # 台本クリーニング：ラベル（見出し）を徹底排除
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
-        script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*|^了解しました.*$', '', script, flags=re.MULTILINE)
+        script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*|^.*?怪談.*?[:：]\s*', '', script, flags=re.MULTILINE)
         script = script.strip()
 
-        img_prompt = "Eerie horror atmosphere, cinematic"
+        # 画像プロンプト抽出
+        img_prompt = "Eerie horror atmosphere, cinematic lighting"
         if "Prompt:" in text or "Prompt：" in text:
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
             img_prompt = re.split(r'BGM[:：]', parts, flags=re.IGNORECASE)[0].strip()
 
         return script, img_prompt, bgm_type
     except:
-        return "…そこにいるのは分かっているわ。でも通信が繋がらないみたいね。", "dark room silhouette", "slow"
+        return "…そこにいるのは分かっているわ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -54,6 +57,7 @@ def download_image(prompt):
         res = requests.get(url, stream=True, timeout=30)
         if res.status_code == 200:
             with open("background.jpg", "wb") as f: f.write(res.content)
+            # imageioエラー対策：確実にRGB画像として保存
             with Image.open("background.jpg") as img:
                 img.convert("RGB").save("background.jpg", "JPEG")
             return True
@@ -75,19 +79,32 @@ def make_video(script, bgm_type):
     bgm_path = f"bgm/{bgm_type}.mp3"
     audio = CompositeAudioClip([voice, AudioFileClip(bgm_path).volumex(0.12).set_duration(voice.duration)]) if os.path.exists(bgm_path) else voice
 
+    # 背景ズーム演出
     try:
         bg = ImageClip("background.jpg").set_duration(voice.duration).resize(lambda t: 1 + 0.01 * t)
     except:
         bg = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice.duration)
 
-    # YouTubeショートで映える赤い大きな字幕
+    # 赤い太文字字幕
     wrapped = "\n".join([script[i:i+12] for i in range(0, len(script), 12)])
-    txt = TextClip(wrapped, fontsize=85, color='red', font='DejaVu-Sans-Bold', stroke_color='black', stroke_width=3, method='caption', size=(1000, None)).set_duration(voice.duration).set_position(('center', 950))
+    txt = TextClip(
+        wrapped, 
+        fontsize=85, 
+        color='red', 
+        font='DejaVu-Sans-Bold', 
+        stroke_color='black', 
+        stroke_width=3, 
+        method='caption', 
+        size=(1000, None)
+    ).set_duration(voice.duration).set_position(('center', 950))
 
-    CompositeVideoClip([bg, txt]).set_audio(audio).write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
+    video = CompositeVideoClip([bg, txt]).set_audio(audio)
+    video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
+    print("--- LUNA SYSTEM START ---")
     s, p, b = get_horror_script()
     download_image(p)
     download_voicevox(s)
     make_video(s, b)
+    print("--- COMPLETED ---")
