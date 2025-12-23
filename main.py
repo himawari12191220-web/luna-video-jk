@@ -7,7 +7,7 @@ from pydub import AudioSegment
 from PIL import Image
 
 def get_horror_script():
-    # ngrokのURL（画像9の通り online であることを前提としています）
+    # 固定ドメインを設定済み
     NGROK_BASE_URL = "https://defectible-merilyn-debonairly.ngrok-free.dev/v1"
     
     payload = {
@@ -15,11 +15,11 @@ def get_horror_script():
         "messages": [
             {
                 "role": "system", 
-                "content": "あなたはプロの怪談師です。余計な見出し（【本文】や1.など）や解説、注意書きは一切含めず、『怪談の本文』『Prompt』『BGM』の3要素だけを簡潔に出力してください。"
+                "content": "あなたは毒舌な女子高生『ルナ』です。視聴者を突き放すような冷たい口調で怪談を語ります。余計な解説や見出し（1. 本文など）は一切含めず、本文、Prompt、BGMのみを出力してください。"
             },
             {
                 "role": "user", 
-                "content": "【出力形式を厳守】\n怪談の本文（日本語で150文字程度。見出し不要）\nPrompt: (英語の画像プロンプト)\nBGM: (slow, dark, tensionのいずれか1つ)"
+                "content": "【出力形式】\n日本語の怪談（150文字程度。文中に『ふふっ』等の演技指示を入れること）\nPrompt: (英語の画像プロンプト)\nBGM: (slow, dark, tensionのいずれか)"
             }
         ],
         "temperature": 0.7
@@ -27,43 +27,38 @@ def get_horror_script():
     
     try:
         response = requests.post(f"{NGROK_BASE_URL}/chat/completions", json=payload, timeout=120)
+        
+        if response.status_code != 200:
+            print(f"API Error: {response.status_code}")
+            return "…ねぇ。設定ミスってるわよ？バカなの？（はぁ…）", "glitch horror", "slow"
+            
         data = response.json()
         text = data['choices'][0]['message']['content']
-        
         print(f"--- Raw AI Output ---\n{text}\n--------------------")
 
-        # 【BGMの抽出】
-        # テキスト全体からキーワードを検索（見出しがどうであれ判定可能にする）
+        # BGM判定
         bgm_type = "slow"
         lower_text = text.lower()
         if "tension" in lower_text: bgm_type = "tension"
         elif "dark" in lower_text: bgm_type = "dark"
-        elif "slow" in lower_text: bgm_type = "slow"
 
-        # 【台本のクリーニング】
-        # 1. Prompt: 以降を完全に切り捨てる
+        # 台本のクリーニング（画像11, 12の不要なラベル【本文】や1.などを消去）
         script = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[0].strip()
-        
-        # 2. 余計なラベル（【本文】、1.、日本語の〜：など）を徹底排除
-        script = re.sub(r'^.*?本文.*?[:：]\s*', '', script, flags=re.MULTILINE)
-        script = re.sub(r'^[0-9]\.\s*', '', script, flags=re.MULTILINE)
-        script = re.sub(r'【.*?】', '', script) # 【本文】などのカッコを消去
-        script = re.sub(r'※.*$', '', script, flags=re.DOTALL) # 画像11にあった注意書きを削除
-        
+        script = re.sub(r'【.*?】|^.*?本文.*?[:：]\s*|^[0-9]\.\s*', '', script, flags=re.MULTILINE)
+        script = re.sub(r'※.*$', '', script, flags=re.DOTALL) 
         script = script.strip()
 
-        # 【画像プロンプトの抽出】
-        img_prompt = "Dark eerie haunted house, cinematic"
+        # 画像プロンプトの抽出
+        img_prompt = "Eerie horror atmosphere, cinematic"
         if "Prompt:" in text or "Prompt：" in text:
-            # Prompt: と BGM: の間を抜き出す
             parts = re.split(r'Prompt[:：]', text, flags=re.IGNORECASE)[1]
             img_prompt = re.split(r'BGM[:：]', parts, flags=re.IGNORECASE)[0].strip()
             img_prompt = re.sub(r'【.*?】', '', img_prompt).strip()
 
         return script, img_prompt, bgm_type
     except Exception as e:
-        print(f"Script Error: {e}")
-        return "…ねぇ。そこにいるのは分かっているよ。…ふふっ。", "Dark room silhouette", "slow"
+        print(f"Connection Failed: {e}")
+        return "…そこにいるのはわかってるわよ。でも今は通信が繋がらないみたいね。", "dark room silhouette", "slow"
 
 def download_image(prompt):
     url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1080&height=1920&seed={int(time.time())}"
@@ -84,7 +79,7 @@ def download_voicevox(text, speaker_id=2):
     
     query_res = requests.post(f"{base_url}/audio_query?text={text}&speaker={speaker_id}")
     query_data = query_res.json()
-    query_data['speedScale'] = 0.88
+    query_data['speedScale'] = 0.88 
     query_data['intonationScale'] = 1.9
     
     voice_res = requests.post(f"{base_url}/synthesis?speaker={speaker_id}", json=query_data)
@@ -103,21 +98,19 @@ def make_video(bgm_type):
     
     voice_audio = AudioFileClip(voice_path)
     
-    # BGMフォルダ内のファイル確認
+    # BGMの読み込み（画像8の構成に対応）
     bgm_path = f"bgm/{bgm_type}.mp3"
-    print(f"Applying BGM: {bgm_path}")
-    
     if os.path.exists(bgm_path):
-        # 画像8のファイル構成に合わせてBGMをミックス
         bgm_audio = AudioFileClip(bgm_path).volumex(0.12).set_duration(voice_audio.duration)
         final_audio = CompositeAudioClip([voice_audio, bgm_audio])
     else:
-        print(f"Warning: BGM {bgm_path} not found.")
+        print(f"BGM未検出: {bgm_path}")
         final_audio = voice_audio
 
+    # 背景のズーム演出
     if os.path.exists("background.jpg"):
         clip = ImageClip("background.jpg").set_duration(voice_audio.duration)
-        clip = clip.resize(lambda t: 1 + 0.01 * t) # 背景ズーム
+        clip = clip.resize(lambda t: 1 + 0.01 * t) 
     else:
         clip = ColorClip(size=(1080, 1920), color=(0,0,0)).set_duration(voice_audio.duration)
     
@@ -125,8 +118,8 @@ def make_video(bgm_type):
     video.write_videofile("output.mp4", fps=24, codec="libx264", audio_codec="aac")
 
 if __name__ == "__main__":
+    print("--- LUNA SYSTEM START ---")
     script, img_prompt, bgm_type = get_horror_script()
-    print(f"--- Cleaned Result ---")
     print(f"Script: {script}")
     print(f"BGM: {bgm_type}")
     
@@ -134,3 +127,4 @@ if __name__ == "__main__":
     download_voicevox(script, speaker_id=2)
     process_audio()
     make_video(bgm_type)
+    print("--- COMPLETED ---")
